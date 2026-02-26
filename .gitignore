@@ -1,0 +1,7 @@
+web_scraper_files/
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+*.log
+.venv/
