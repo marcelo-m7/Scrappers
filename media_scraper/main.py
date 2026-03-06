@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -19,6 +20,7 @@ class MediaScraperConfig:
     timeout: int = 20
     max_pages: Optional[int] = 60
     max_assets: Optional[int] = 300
+    naming_scheme: str = "descriptive"  # Options: 'descriptive', 'compact', 'sequential'
     include_extensions: Set[str] = field(default_factory=lambda: {".png", ".svg"})
     include_keywords: Set[str] = field(
         default_factory=lambda: {
@@ -64,6 +66,8 @@ class SiteMediaScraper:
         self.seen_asset_urls: Set[str] = set()
         self.seen_content_hashes: Set[str] = set()
         self.downloaded_assets: List[Path] = []
+        self.asset_metadata: List[Dict] = []
+        self.asset_counter: Dict[str, int] = {}
 
     def run(self) -> Dict[str, int]:
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -79,6 +83,7 @@ class SiteMediaScraper:
             logging.info("[%s/%s] Crawling %s", index, len(page_urls), page_url)
             self.scrape_page_assets(page_url)
 
+        self.save_metadata()
         return {
             "pages_discovered": len(page_urls),
             "assets_downloaded": len(self.downloaded_assets),
@@ -232,13 +237,27 @@ class SiteMediaScraper:
         category_dir = self.output_dir / category
         category_dir.mkdir(parents=True, exist_ok=True)
 
-        filename = self.build_filename(asset_url, asset["page_url"], extension, content_hash)
+        filename = self.build_filename(
+            asset_url, asset["page_url"], extension, content_hash, category
+        )
         path = category_dir / filename
         if path.exists():
             return
 
         path.write_bytes(response.content)
         self.downloaded_assets.append(path)
+        
+        # Track metadata
+        self.asset_metadata.append({
+            "original_url": asset_url,
+            "page_url": asset["page_url"],
+            "saved_path": str(path.relative_to(self.output_dir)),
+            "file_size": len(response.content),
+            "content_hash": content_hash,
+            "category": category,
+            "naming_scheme": self.config.naming_scheme,
+        })
+        
         logging.info("Saved %s", path)
 
     def pick_category(self, asset_url: str, context: str) -> str:
@@ -253,11 +272,60 @@ class SiteMediaScraper:
             return "images"
         return "other"
 
-    def build_filename(self, asset_url: str, page_url: str, extension: str, content_hash: str) -> str:
-        page_slug = self.slugify(urlparse(page_url).path.strip("/") or "home")
-        asset_slug = self.slugify(Path(urlparse(asset_url).path).stem)
-        short_hash = content_hash[:8]
-        return f"{page_slug}__{asset_slug}__{short_hash}{extension}"
+    def build_filename(
+        self,
+        asset_url: str,
+        page_url: str,
+        extension: str,
+        content_hash: str,
+        category: str = "",
+    ) -> str:
+        if self.config.naming_scheme == "sequential":
+            # Sequential numbering: category_001.png, category_002.png
+            if category not in self.asset_counter:
+                self.asset_counter[category] = 0
+            self.asset_counter[category] += 1
+            return f"{category}_{self.asset_counter[category]:03d}{extension}"
+        
+        elif self.config.naming_scheme == "compact":
+            # Compact: just hash_assetname.png
+            asset_slug = self.slugify(Path(urlparse(asset_url).path).stem)
+            short_hash = content_hash[:8]
+            return f"{short_hash}_{asset_slug}{extension}"
+        
+        else:  # descriptive (default)
+            # Descriptive: category__page__asset__hash.png
+            page_slug = self.slugify(urlparse(page_url).path.strip("/") or "home")
+            asset_slug = self.slugify(Path(urlparse(asset_url).path).stem)
+            short_hash = content_hash[:8]
+            return f"{category}__{page_slug}__{asset_slug}__{short_hash}{extension}"
+
+    def save_metadata(self) -> None:
+        """Save metadata index of all downloaded assets."""
+        metadata_file = self.output_dir / "assets_index.json"
+        metadata_content = {
+            "scraper_config": {
+                "domain": self.config.domain,
+                "sitemap_url": self.config.sitemap_url,
+                "naming_scheme": self.config.naming_scheme,
+                "timestamp": str(Path(__file__).stat().st_mtime),
+            },
+            "assets": self.asset_metadata,
+            "summary": {
+                "total_assets": len(self.asset_metadata),
+                "categories": {},
+            },
+        }
+        
+        # Count assets by category
+        for asset in self.asset_metadata:
+            category = asset["category"]
+            metadata_content["summary"]["categories"][category] = (
+                metadata_content["summary"]["categories"].get(category, 0) + 1
+            )
+        
+        metadata_file.write_text(json.dumps(metadata_content, indent=2))
+        logging.info("Saved metadata index to %s", metadata_file)
 
     @staticmethod
     def slugify(value: str) -> str:
@@ -273,6 +341,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-pages", type=int, default=60, help="Maximum number of pages to crawl")
     parser.add_argument("--max-assets", type=int, default=300, help="Maximum number of assets to download")
     parser.add_argument("--timeout", type=int, default=20, help="Request timeout in seconds")
+    parser.add_argument(
+        "--naming-scheme",
+        default="descriptive",
+        choices=["descriptive", "compact", "sequential"],
+        help="File naming scheme: 'descriptive' (category__page__asset__hash), "
+        "'compact' (hash_asset), or 'sequential' (category_001, category_002, ...)",
+    )
     parser.add_argument(
         "--include-keyword",
         action="append",
@@ -297,6 +372,7 @@ def build_config_from_args(args: argparse.Namespace) -> MediaScraperConfig:
         max_pages=args.max_pages,
         max_assets=args.max_assets,
         timeout=args.timeout,
+        naming_scheme=args.naming_scheme,
     )
     if args.include_keyword:
         config.include_keywords.update({k.lower() for k in args.include_keyword})

@@ -40,8 +40,9 @@ class TestMediaScraper(unittest.TestCase):
             "https://www.example.com/apps/awesome page/",
             ".svg",
             "abcdef0123456789",
+            "mockups",
         )
-        self.assertEqual(filename, "apps-awesome-page__ui-mockup-final__abcdef01.svg")
+        self.assertEqual(filename, "mockups__apps-awesome-page__ui-mockup-final__abcdef01.svg")
 
     def test_extract_candidates_and_filtering(self) -> None:
         html = """
@@ -80,6 +81,38 @@ class TestMediaScraper(unittest.TestCase):
             files = list(Path(temp_dir).rglob("*.png"))
             self.assertEqual(len(files), 1)
             self.assertEqual(len(self.scraper.downloaded_assets), 1)
+
+    def test_naming_scheme_compact(self) -> None:
+        self.config.naming_scheme = "compact"
+        scraper = SiteMediaScraper(self.config)
+        filename = scraper.build_filename(
+            "https://www.example.com/media/product_dashboard.png",
+            "https://www.example.com/page",
+            ".png",
+            "abcdef0123456789",
+            "images",
+        )
+        self.assertEqual(filename, "abcdef01_product-dashboard.png")
+
+    def test_naming_scheme_sequential(self) -> None:
+        self.config.naming_scheme = "sequential"
+        scraper = SiteMediaScraper(self.config)
+        filename1 = scraper.build_filename(
+            "https://www.example.com/media/a.png",
+            "https://www.example.com/page",
+            ".png",
+            "hash1",
+            "icons",
+        )
+        filename2 = scraper.build_filename(
+            "https://www.example.com/media/b.png",
+            "https://www.example.com/page",
+            ".png",
+            "hash2",
+            "icons",
+        )
+        self.assertEqual(filename1, "icons_001.png")
+        self.assertEqual(filename2, "icons_002.png")
 
 
 if __name__ == "__main__":
