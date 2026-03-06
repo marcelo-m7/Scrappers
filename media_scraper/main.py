@@ -104,7 +104,7 @@ class SiteMediaScraper:
                 continue
 
             soup = BeautifulSoup(response.content, "xml")
-            sitemap_entries = [loc.get_text(strip=True) for loc in soup.find_all("sitemap") for loc in loc.find_all("loc")]
+            sitemap_entries = [loc_elem.get_text(strip=True) for sitemap in soup.find_all("sitemap") for loc_elem in sitemap.find_all("loc")]
             if sitemap_entries:
                 queue.extend(sitemap_entries)
                 continue
