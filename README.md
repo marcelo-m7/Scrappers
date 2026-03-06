@@ -62,6 +62,25 @@ web_scraper_start(
 )
 ```
 
+
+### 3. 🖼️ [Media Scraper](./media_scraper/) - The Visual Asset Hunter
+
+Purpose-built for crawling sitemap-driven websites (like Odoo) and collecting PNG/SVG visual assets.
+
+**What it does:**
+- Uses sitemap as the primary discovery entrypoint
+- Crawls discovered pages and extracts media links (`img`, `source`, `link`, etc.)
+- Downloads `.png` and `.svg` assets with duplicate protection
+- Organizes output into `icons/`, `images/`, `mockups/`, `illustrations/`, and `other/`
+- Applies keyword-based filters to prioritize reusable inspiration assets
+
+**Quick Start:**
+```bash
+cd media_scraper
+pip install -r requirements.txt
+python main.py  # Defaults to odoo.com sitemap
+```
+
 ## 🚀 Installation
 
 Each scraper lives in its own folder with its own README and dependencies. They're like independent adults but living under the same roof.
@@ -132,10 +151,15 @@ Scrappers/
 │   ├── main.py              # The magic happens here
 │   ├── README.md            # Detailed Instagram scraper docs
 │   └── LICENSE              # Legal stuff
-└── wordpress/               # WordPress sitemap scraper
-    ├── main.py              # Sitemap parsing wizardry
-    ├── README.md            # Detailed WordPress scraper docs
-    └── requirements.txt     # Dependencies (requests, beautifulsoup4, lxml)
+├── wordpress/               # WordPress sitemap scraper
+│   ├── main.py              # Sitemap parsing wizardry
+│   ├── README.md            # Detailed WordPress scraper docs
+│   └── requirements.txt     # Dependencies (requests, beautifulsoup4, lxml)
+└── media_scraper/           # Sitemap-driven media asset scraper
+    ├── main.py              # Media crawler + downloader
+    ├── README.md            # Detailed media scraper docs
+    ├── requirements.txt     # Dependencies
+    └── tests/               # Unit tests for filtering, naming, dedup
 ```
 
 ## 🐛 Troubleshooting
